@@ -72,3 +72,15 @@ Anything that can be accessed via HTTP can be pinned. Microipfs automatically fe
 ## 2. pin web content
 
 Anything that can be accessed via HTTP can be pinned. Microipfs automatically fetches the URL and pins it to IPFS using NFT.STORAGE
+
+## 3. pin multiple files (dataset)
+
+You can pin multiple files at once as a dataset. This is useful for creating AI training datasets or other collections of files. To do this, make a POST request to `/add-dataset` with the files included as `multipart/form-data`.
+
+The response will be a JSON object containing the CID of a manifest file. The manifest file is a JSON object that contains a list of all the files in the dataset, along with their individual CIDs.
+
+Example using `curl`:
+
+```bash
+curl -X POST -F "files=@/path/to/file1.jpg" -F "files=@/path/to/file2.png" http://localhost:3000/add-dataset
+```
