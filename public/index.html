@@ -1,5 +1,44 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>microipfs gallery</title>
+  <style>
+    body { font-family: sans-serif; }
+    #gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem; }
+    .card { border: 1px solid #ccc; border-radius: 5px; padding: 1rem; }
+    .card h2 { font-size: 1.2rem; }
+  </style>
+</head>
 <body>
-<h1>Usage</h1>
+  <h1>Recent Datasets</h1>
+  <div id="gallery"></div>
+
+  <script>
+    async function fetchRecent() {
+      const response = await fetch('/recent');
+      const cids = await response.json();
+      const gallery = document.getElementById('gallery');
+      gallery.innerHTML = '';
+
+      for (const cid of cids) {
+        const manifestUrl = `https://ipfs.io/ipfs/${cid}`;
+        const manifestResponse = await fetch(manifestUrl);
+        const manifest = await manifestResponse.json();
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <h2>${manifest.name}</h2>
+          <p>${manifest.description}</p>
+          <a href="${manifestUrl}" target="_blank">View on IPFS</a>
+        `;
+        gallery.appendChild(card);
+      }
+    }
+
+    fetchRecent();
+  </script>
 </body>
 </html>

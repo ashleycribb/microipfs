@@ -75,12 +75,27 @@ Anything that can be accessed via HTTP can be pinned. Microipfs automatically fe
 
 ## 3. pin multiple files (dataset)
 
-You can pin multiple files at once as a dataset. This is useful for creating AI training datasets or other collections of files. To do this, make a POST request to `/add-dataset` with the files included as `multipart/form-data`.
+You can pin multiple files at once as a dataset. This is useful for creating AI training datasets or other collections of files. To do this, make a POST request to `/add-dataset` with the files included as `multipart/form-data`. You can also include optional `name` and `description` fields to better organize your datasets.
 
 The response will be a JSON object containing the CID of a manifest file. The manifest file is a JSON object that contains a list of all the files in the dataset, along with their individual CIDs.
 
 Example using `curl`:
 
 ```bash
-curl -X POST -F "files=@/path/to/file1.jpg" -F "files=@/path/to/file2.png" http://localhost:3000/add-dataset
+curl -X POST \
+  -F "files=@/path/to/file1.jpg" \
+  -F "files=@/path/to/file2.png" \
+  -F "name=My Awesome Dataset" \
+  -F "description=A collection of images for my AI model." \
+  http://localhost:3000/add-dataset
+```
+
+## 4. check CID status
+
+You can check the status of a pinned CID by making a GET request to `/status/:cid`.
+
+Example using `curl`:
+
+```bash
+curl http://localhost:3000/status/bafybe....
 ```
