@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Model Playground</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .input-group { margin-bottom: 1rem; }
+    #canvas { border: 2px solid black; cursor: crosshair; }
+    #prediction { font-size: 1.5rem; font-weight: bold; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Interactive AI Model Playground</h1>
+    <p>This playground is designed to run a pre-trained image classification model (like the MNIST handwritten digit recognizer) that has been stored on IPFS.</p>
+
+    <div class="input-group">
+      <label for="cid">Model CID:</label>
+      <input type="text" id="cid" placeholder="Enter the IPFS CID of a model.json file..." style="width: 100%;">
+      <button id="load-btn">Load Model</button>
+    </div>
+
+    <canvas id="canvas" width="280" height="280"></canvas>
+    <br>
+    <button id="clear-btn">Clear Drawing</button>
+
+    <h2>Prediction: <span id="prediction"></span></h2>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const cidInput = document.getElementById('cid');
+    const loadBtn = document.getElementById('load-btn');
+    const clearBtn = document.getElementById('clear-btn');
+    const predictionSpan = document.getElementById('prediction');
+    const statusDiv = document.getElementById('status');
+
+    let model;
+    let isDrawing = false;
+
+    // Canvas setup
+    ctx.lineWidth = 15;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'white';
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    canvas.addEventListener('mousedown', () => isDrawing = true);
+    canvas.addEventListener('mouseup', () => {
+      isDrawing = false;
+      ctx.beginPath();
+      if (model) predict();
+    });
+    canvas.addEventListener('mousemove', draw);
+
+    function draw(event) {
+      if (!isDrawing) return;
+      ctx.lineTo(event.offsetX, event.offsetY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(event.offsetX, event.offsetY);
+    }
+
+    clearBtn.addEventListener('click', () => {
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      predictionSpan.textContent = '';
+    });
+
+    loadBtn.addEventListener('click', async () => {
+      const cid = cidInput.value;
+      if (!cid) {
+        statusDiv.textContent = 'Please enter a model CID.';
+        return;
+      }
+      try {
+        statusDiv.textContent = 'Loading model...';
+        const modelUrl = `https://ipfs.io/ipfs/${cid}`;
+        model = await tf.loadLayersModel(modelUrl);
+        statusDiv.textContent = 'Model loaded successfully! Draw a digit (0-9).';
+      } catch (error) {
+        console.error('Failed to load model:', error);
+        statusDiv.textContent = `Error: ${error.message}`;
+      }
+    });
+
+    async function predict() {
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      // Pre-process the image data to a 28x28 grayscale tensor
+      let tensor = tf.browser.fromPixels(imageData, 1)
+        .resizeNearestNeighbor([28, 28])
+        .toFloat()
+        .div(tf.scalar(255.0))
+        .expandDims();
+
+      const prediction = await model.predict(tensor).data();
+      const predictedDigit = tf.argMax(prediction).dataSync()[0];
+      predictionSpan.textContent = predictedDigit;
+    }
+  </script>
+</body>
+</html>

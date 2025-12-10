@@ -120,3 +120,13 @@ Example using `curl`:
 ```bash
 curl http://localhost:3000/status/bafybe....
 ```
+
+## 6. Interactive AI Model Playground
+
+The application includes a tool at `/playground.html` for interacting with pre-trained AI models (specifically, TensorFlow.js Layers models) that have been pinned to IPFS.
+
+To use it:
+1.  Create a "Learning Object" that contains a TensorFlow.js `model.json` file and its associated binary weight files (`.bin`).
+2.  Get the CID of the `model.json` file.
+3.  Open the playground, enter the CID, and click "Load Model".
+4.  Interact with the model (e.g., by drawing on the canvas for an image classification model).
