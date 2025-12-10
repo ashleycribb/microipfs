@@ -75,6 +75,24 @@ app.get('/status/:cid', async (req, res) => {
   }
 })
 
+app.post('/add-encrypted-object', upload.single('file'), async (req, res) => {
+  const file = req.file
+  if (!file) {
+    return res.status(400).json({ error: 'No file uploaded' })
+  }
+
+  try {
+    const cid = await i.path(file.path)
+    res.json({ success: cid })
+  } catch (error) {
+    console.error('Failed to pin encrypted object:', error)
+    res.status(500).json({ error: 'Failed to pin encrypted object' })
+  } finally {
+    // Clean up the temporary file
+    await fsp.unlink(file.path)
+  }
+})
+
 app.post('/add-learning-object', upload.array('files'), async (req, res) => {
   const files = req.files
   if (!files || files.length === 0) {

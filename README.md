@@ -103,7 +103,15 @@ curl -X POST \
   http://localhost:3000/add-learning-object
 ```
 
-## 4. check CID status
+## 4. pin encrypted object (for student portfolios)
+
+For sensitive data like student work, the application supports client-side encryption. The encryption and decryption happen entirely in the user's browser, and the server only ever handles the encrypted data. This ensures student privacy.
+
+The reference implementation for this workflow can be found at `/portfolio.html`.
+
+An endpoint at `POST /add-encrypted-object` is available to receive the encrypted file blob.
+
+## 5. check CID status
 
 You can check the status of a pinned CID by making a GET request to `/status/:cid`.
 
