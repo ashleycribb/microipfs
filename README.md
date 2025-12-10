@@ -73,21 +73,34 @@ Anything that can be accessed via HTTP can be pinned. Microipfs automatically fe
 
 Anything that can be accessed via HTTP can be pinned. Microipfs automatically fetches the URL and pins it to IPFS using NFT.STORAGE
 
-## 3. pin multiple files (dataset)
+## 3. pin learning object
 
-You can pin multiple files at once as a dataset. This is useful for creating AI training datasets or other collections of files. To do this, make a POST request to `/add-dataset` with the files included as `multipart/form-data`. You can also include optional `name` and `description` fields to better organize your datasets.
+You can pin a learning object, which consists of multiple files and rich metadata. This is useful for creating a permanent, verifiable archive of educational resources. To do this, make a POST request to `/add-learning-object` with the files and metadata included as `multipart/form-data`.
 
-The response will be a JSON object containing the CID of a manifest file. The manifest file is a JSON object that contains a list of all the files in the dataset, along with their individual CIDs.
+The response will be a JSON object containing the CID of a manifest file. The manifest file is a JSON object that contains all the metadata and a list of the files in the learning object, along with their individual CIDs.
+
+**Metadata Fields:**
+
+*   `title` (string): The title of the learning object.
+*   `author` (string): The author or creator.
+*   `subject` (string): The subject matter.
+*   `gradeLevel` (string): The target grade level (e.g., "9-12").
+*   `license` (string): The content license (e.g., "CC-BY-4.0").
+*   `description` (string): A brief description of the content.
 
 Example using `curl`:
 
 ```bash
 curl -X POST \
-  -F "files=@/path/to/file1.jpg" \
-  -F "files=@/path/to/file2.png" \
-  -F "name=My Awesome Dataset" \
-  -F "description=A collection of images for my AI model." \
-  http://localhost:3000/add-dataset
+  -F "files=@/path/to/lesson-plan.pdf" \
+  -F "files=@/path/to/presentation.pptx" \
+  -F "title=Introduction to Photosynthesis" \
+  -F "author=Jane Doe" \
+  -F "subject=Biology" \
+  -F "gradeLevel=9-12" \
+  -F "license=CC-BY-SA-4.0" \
+  -F "description=A comprehensive introduction to the process of photosynthesis." \
+  http://localhost:3000/add-learning-object
 ```
 
 ## 4. check CID status

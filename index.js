@@ -75,13 +75,13 @@ app.get('/status/:cid', async (req, res) => {
   }
 })
 
-app.post('/add-dataset', upload.array('files'), async (req, res) => {
+app.post('/add-learning-object', upload.array('files'), async (req, res) => {
   const files = req.files
   if (!files || files.length === 0) {
     return res.status(400).json({ error: 'No files uploaded' })
   }
 
-  const { name, description } = req.body
+  const { title, author, subject, gradeLevel, license, description } = req.body
 
   try {
     const cids = []
@@ -94,7 +94,11 @@ app.post('/add-dataset', upload.array('files'), async (req, res) => {
     }
 
     const manifest = {
-      name: name || 'Untitled Dataset',
+      title: title || 'Untitled Learning Object',
+      author: author || 'Unknown',
+      subject: subject || 'Uncategorized',
+      gradeLevel: gradeLevel || 'N/A',
+      license: license || 'CC-BY-4.0',
       description: description || '',
       files: cids
     }
