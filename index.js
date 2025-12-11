@@ -6,8 +6,39 @@ var multer = require('multer')
 const fs = require('fs')
 const fsp = require('fs').promises
 const axios = require('axios')
+const jose = require('jose')
 var app = express()
 var i = new I(process.env.NFT_STORAGE_KEY)
+
+let institutionKeyPair;
+const KEY_FILE = 'keys.json';
+
+async function initializeKeys() {
+  try {
+    if (fs.existsSync(KEY_FILE)) {
+      const keyFileContent = await fsp.readFile(KEY_FILE, 'utf-8');
+      const jwk = JSON.parse(keyFileContent);
+      institutionKeyPair = {
+        publicKey: await jose.importJWK(jwk.publicKey, 'ES256'),
+        privateKey: await jose.importJWK(jwk.privateKey, 'ES256'),
+      };
+      console.log('Loaded institutional key pair from file.');
+    } else {
+      const { publicKey, privateKey } = await jose.generateKeyPair('ES256');
+      institutionKeyPair = { publicKey, privateKey };
+      const jwk = {
+        publicKey: await jose.exportJWK(publicKey),
+        privateKey: await jose.exportJWK(privateKey),
+      };
+      await fsp.writeFile(KEY_FILE, JSON.stringify(jwk, null, 2));
+      console.log('Generated new institutional key pair and saved to file.');
+    }
+  } catch (error) {
+    console.error('Failed to initialize keys:', error);
+  }
+}
+
+initializeKeys();
 
 const recentUploads = []
 const MAX_RECENT_UPLOADS = 10
@@ -53,6 +84,54 @@ app.post('/add', async (req, res) => {
   console.log("cid", cid)
   res.json({ success: cid })
 })
+app.get('/.well-known/jwks.json', async (req, res) => {
+  if (!institutionKeyPair || !institutionKeyPair.publicKey) {
+    return res.status(500).json({ error: 'Key pair not generated yet.' });
+  }
+  const jwk = await jose.exportJWK(institutionKeyPair.publicKey);
+  res.json({ keys: [jwk] });
+});
+
+app.post('/issue-credential', async (req, res) => {
+  if (!institutionKeyPair || !institutionKeyPair.privateKey) {
+    return res.status(500).json({ error: 'Key pair not generated yet.' });
+  }
+
+  const { studentDid, workCid, claims } = req.body;
+  if (!studentDid || !workCid || !claims) {
+    return res.status(400).json({ error: 'Missing required fields.' });
+  }
+
+  try {
+    const vcPayload = {
+      '@context': [
+        'https://www.w3.org/2018/credentials/v1',
+        'https://www.w3.org/2018/credentials/examples/v1'
+      ],
+      id: `urn:uuid:${crypto.randomUUID()}`,
+      type: ['VerifiableCredential', 'AcademicCredential'],
+      issuer: 'did:web:example.com', // In a real app, this would be the institution's DID
+      issuanceDate: new Date().toISOString(),
+      credentialSubject: {
+        id: studentDid,
+        workCid: workCid,
+        ...claims
+      }
+    };
+
+    const jwt = await new jose.SignJWT(vcPayload)
+      .setProtectedHeader({ alg: 'ES256' })
+      .setIssuedAt()
+      .setIssuer('did:web:example.com')
+      .setSubject(studentDid)
+      .sign(institutionKeyPair.privateKey);
+
+    res.json({ vcJwt: jwt });
+  } catch (error) {
+    console.error('Failed to issue credential:', error);
+    res.status(500).json({ error: 'Failed to issue credential.' });
+  }
+});
 app.get('/recent', (req, res) => {
   res.json(recentUploads)
 })

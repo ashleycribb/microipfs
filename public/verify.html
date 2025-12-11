@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Credential Verifier</title>
+  <script src="https://cdn.jsdelivr.net/npm/jose@latest/dist/browser/jose.min.js"></script>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .verified { border: 2px solid green; padding: 1rem; }
+    .invalid { border: 2px solid red; padding: 1rem; }
+    pre { white-space: pre-wrap; word-wrap: break-word; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Credential Verifier</h1>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const resultDiv = document.getElementById('result');
+
+    async function verify() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const vcJwt = urlParams.get('vc');
+        if (!vcJwt) {
+          throw new Error('No Verifiable Credential JWT found in the URL.');
+        }
+
+        // Fetch the institution's public key (JWK)
+        const response = await fetch('/.well-known/jwks.json');
+        const jwks = await response.json();
+        const publicKey = await jose.importJWK(jwks.keys[0], 'ES256');
+
+        // Verify the JWT
+        const { payload, protectedHeader } = await jose.jwtVerify(vcJwt, publicKey, {
+          issuer: 'did:web:example.com'
+        });
+
+        // Display the verified credential
+        resultDiv.className = 'verified';
+        resultDiv.innerHTML = `
+          <h2>✓ Credential Verified</h2>
+          <p>The signature is valid and the credential was issued by a trusted authority.</p>
+          <h3>Credential Details:</h3>
+          <pre>${JSON.stringify(payload, null, 2)}</pre>
+        `;
+
+      } catch (error) {
+        console.error('Verification failed:', error);
+        resultDiv.className = 'invalid';
+        resultDiv.innerHTML = `
+          <h2>✗ Verification Failed</h2>
+          <p>${error.message}</p>
+        `;
+      }
+    }
+
+    verify();
+  </script>
+</body>
+</html>

@@ -111,7 +111,22 @@ The reference implementation for this workflow can be found at `/portfolio.html`
 
 An endpoint at `POST /add-encrypted-object` is available to receive the encrypted file blob.
 
-## 5. check CID status
+## 5. issue verifiable credential
+
+The application supports the creation of W3C-compliant Verifiable Credentials (VCs) in the form of JWTs. This allows the institution to issue tamper-proof digital attestations about student work.
+
+**Endpoint:** `POST /issue-credential`
+
+**Body (JSON):**
+*   `studentDid` (string): The Decentralized Identifier of the student.
+*   `workCid` (string): The IPFS CID of the student's work.
+*   `claims` (object): A JSON object containing the claims to be included in the credential (e.g., `{ "grade": "A" }`).
+
+The server signs the credential with the institution's private key. The public key is available at `/.well-known/jwks.json` for verifiers.
+
+The reference implementation for a student wallet and a public verifier can be found at `/portfolio.html` and `/verify.html`, respectively.
+
+## 6. check CID status
 
 You can check the status of a pinned CID by making a GET request to `/status/:cid`.
 
@@ -121,7 +136,7 @@ Example using `curl`:
 curl http://localhost:3000/status/bafybe....
 ```
 
-## 6. Interactive AI Model Playground
+## 7. Interactive AI Model Playground
 
 The application includes a tool at `/playground.html` for interacting with pre-trained AI models (specifically, TensorFlow.js Layers models) that have been pinned to IPFS.
 
