@@ -1,147 +1,96 @@
-# microipfs
+# microipfs: The Permanent Record as a Service
 
-> dead simple microservice for pinning NFT related data to IPFS
+> A scalable microservice for creating permanent, verifiable academic records on IPFS.
 
-Microipfs is a microservice for adding NFT related data (NFT asset files, metadata json, etc.) to IPFS using [nft.storage](https://nft.storage)
+This project provides a suite of tools for educational institutions to transition to a model of student-owned, verifiable digital records. It acts as a "Permanent Record as a Service," leveraging the power of IPFS for immutable storage and Verifiable Credentials for cryptographic proof.
 
-# install
+# Core Features
 
-## 1. Install Microipfs
+1.  **Batch Archiving (`/batch-archive`):** A scalable endpoint for institutions to archive large volumes of student work (e.g., end-of-semester projects) to IPFS. It returns a single, easily-managed root CID for the entire batch.
+2.  **Verifiable Credentials with IPFS Proof (`/issue-credential`):** A system for issuing tamper-proof academic credentials (e.g., for a diploma or a specific skill) that are cryptographically linked to the underlying student work stored on IPFS.
+3.  **Student-Owned Identity & Data:** The platform includes reference implementations for a student-run digital wallet (`/portfolio.html`) with client-side encryption, and a public verifier (`/verify.html`) that can perform "deep verification" of a credential and its linked proof of work.
+4.  **Learning Object Repository (`/add-learning-object`):** A tool for creating permanent, resilient archives of open educational resources.
+5.  **AI Model Playground (`/playground.html`):** An interactive tool for running small AI/ML models directly in the browser from IPFS.
 
-Clone the repo
+---
 
-```
-git clone 
-```
+# Installation and Setup
 
-Install dependencies
-
-```
+## 1. Install Dependencies
+```bash
 npm install
 ```
 
-
-## 2. Connect with NFT.STORAGE
-
-create an `.env` file inside the microipfs folder and,
-
-- enter `NFT_STORAGE_KEY`: The NFT STORAGE API KEY
-- (optional) enter `ALLOWED`: A comma separated string of host HTTP URLs
-- (optional) enter `PORT`: The port to run the server from
-
-Example
-
+## 2. Configure Environment
+Create a `.env` file in the root of the project and add your `NFT_STORAGE_KEY`.
 ```
-NFT_STORAGE_KEY=<eyJhbCg.....
-WHITELIST=https://myapp.com,http://localhost:8080
-PORT=3000
+NFT_STORAGE_KEY=<YOUR_API_KEY>
 ```
 
-## 3. Start the server
-
-Start the server
-
+## 3. Run the Server
+```bash
+node index.js
 ```
-npm start
-```
+The server will start, and if `keys.json` is not found, it will generate a new key pair for signing Verifiable Credentials.
 
-# usage
+---
 
-1. pin JSON
-2. pin web content
+# API Reference
 
-## 1. pin JSON
+## 1. Batch Archive
 
-Pinning a JSON object (NFT metadata) is easy. Simply make a POST request to microipfs:
+A scalable endpoint for creating a permanent archive of multiple files in a single transaction.
 
-```
-POST /add
-HOST: microipfs.com
-Content-Type:application/json
-Accept:application/json
+**Endpoint:** `POST /batch-archive`
 
+**Body (JSON):** An object with an `items` property, which is an array of objects. Each object must have a `url` (the URL of the content to pin) and can have an optional `metadata` object.
+```json
 {
-  "name": "my nft",
-  "description": "this is my first nft",
-  "image": "ipfs://ipfs/....",
+  "items": [
+    {
+      "url": "https://example.com/student-a/thesis.pdf",
+      "metadata": { "studentId": "123", "title": "My Final Thesis" }
+    },
+    {
+      "url": "https://example.com/student-b/project.zip",
+      "metadata": { "studentId": "456", "title": "Capstone Project" }
+    }
+  ]
 }
 ```
+The endpoint returns a single `manifestCid` for the entire batch.
 
-Anything that can be accessed via HTTP can be pinned. Microipfs automatically fetches the URL and pins it to IPFS using NFT.STORAGE
+## 2. Issue Verifiable Credential
 
-## 2. pin web content
-
-Anything that can be accessed via HTTP can be pinned. Microipfs automatically fetches the URL and pins it to IPFS using NFT.STORAGE
-
-## 3. pin learning object
-
-You can pin a learning object, which consists of multiple files and rich metadata. This is useful for creating a permanent, verifiable archive of educational resources. To do this, make a POST request to `/add-learning-object` with the files and metadata included as `multipart/form-data`.
-
-The response will be a JSON object containing the CID of a manifest file. The manifest file is a JSON object that contains all the metadata and a list of the files in the learning object, along with their individual CIDs.
-
-**Metadata Fields:**
-
-*   `title` (string): The title of the learning object.
-*   `author` (string): The author or creator.
-*   `subject` (string): The subject matter.
-*   `gradeLevel` (string): The target grade level (e.g., "9-12").
-*   `license` (string): The content license (e.g., "CC-BY-4.0").
-*   `description` (string): A brief description of the content.
-
-Example using `curl`:
-
-```bash
-curl -X POST \
-  -F "files=@/path/to/lesson-plan.pdf" \
-  -F "files=@/path/to/presentation.pptx" \
-  -F "title=Introduction to Photosynthesis" \
-  -F "author=Jane Doe" \
-  -F "subject=Biology" \
-  -F "gradeLevel=9-12" \
-  -F "license=CC-BY-SA-4.0" \
-  -F "description=A comprehensive introduction to the process of photosynthesis." \
-  http://localhost:3000/add-learning-object
-```
-
-## 4. pin encrypted object (for student portfolios)
-
-For sensitive data like student work, the application supports client-side encryption. The encryption and decryption happen entirely in the user's browser, and the server only ever handles the encrypted data. This ensures student privacy.
-
-The reference implementation for this workflow can be found at `/portfolio.html`.
-
-An endpoint at `POST /add-encrypted-object` is available to receive the encrypted file blob.
-
-## 5. issue verifiable credential
-
-The application supports the creation of W3C-compliant Verifiable Credentials (VCs) in the form of JWTs. This allows the institution to issue tamper-proof digital attestations about student work.
+Issues a W3C-compliant Verifiable Credential (VC) as a JWT.
 
 **Endpoint:** `POST /issue-credential`
 
 **Body (JSON):**
 *   `studentDid` (string): The Decentralized Identifier of the student.
-*   `workCid` (string): The IPFS CID of the student's work.
-*   `claims` (object): A JSON object containing the claims to be included in the credential (e.g., `{ "grade": "A" }`).
+*   `claims` (object): A JSON object containing the claims to be included in the credential (e.g., `{ "degree": "Bachelor of Science" }`).
+*   `proofOfWorkCID` (string, optional): The IPFS CID of a manifest file (e.g., from a batch archive) that contains the evidence supporting this credential. This enables "deep verification."
 
-The server signs the credential with the institution's private key. The public key is available at `/.well-known/jwks.json` for verifiers.
+The server signs the credential with its private key. The public key is available at `/.well-known/jwks.json` for verifiers.
 
-The reference implementation for a student wallet and a public verifier can be found at `/portfolio.html` and `/verify.html`, respectively.
+## 3. Pin Learning Object
 
-## 6. check CID status
+Pins a single educational resource with rich metadata.
 
-You can check the status of a pinned CID by making a GET request to `/status/:cid`.
+**Endpoint:** `POST /add-learning-object` (multipart/form-data)
 
-Example using `curl`:
+**Fields:** `files`, `title`, `author`, `subject`, `gradeLevel`, `license`, `description`.
 
-```bash
-curl http://localhost:3000/status/bafybe....
-```
+## 4. Pin Encrypted Object (Student Portfolio)
 
-## 7. Interactive AI Model Playground
+Stores a pre-encrypted blob of data. The server has no knowledge of the contents.
 
-The application includes a tool at `/playground.html` for interacting with pre-trained AI models (specifically, TensorFlow.js Layers models) that have been pinned to IPFS.
+**Endpoint:** `POST /add-encrypted-object` (multipart/form-data)
 
-To use it:
-1.  Create a "Learning Object" that contains a TensorFlow.js `model.json` file and its associated binary weight files (`.bin`).
-2.  Get the CID of the `model.json` file.
-3.  Open the playground, enter the CID, and click "Load Model".
-4.  Interact with the model (e.g., by drawing on the canvas for an image classification model).
+**Fields:** `file`
+
+## 5. Check CID Status
+
+Checks the pinning status of a CID on NFT.storage.
+
+**Endpoint:** `GET /status/:cid`

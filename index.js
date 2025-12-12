@@ -68,6 +68,7 @@ const upload = multer({
 })
 app.use(express.json())
 app.use(express.static('public'))
+app.use('/node_modules', express.static('node_modules'))
 if (allowed && allowed.length > 0) {
   app.use(cors({ origin: allowed }))
 } else {
@@ -115,6 +116,7 @@ app.post('/issue-credential', async (req, res) => {
       credentialSubject: {
         id: studentDid,
         workCid: workCid,
+        proofOfWorkCID: req.body.proofOfWorkCID, // New field for IPFS proof
         ...claims
       }
     };
@@ -130,6 +132,34 @@ app.post('/issue-credential', async (req, res) => {
   } catch (error) {
     console.error('Failed to issue credential:', error);
     res.status(500).json({ error: 'Failed to issue credential.' });
+  }
+});
+app.post('/batch-archive', async (req, res) => {
+  const { items } = req.body; // Expects an array of objects with { url, metadata }
+
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Invalid or empty "items" array in request body.' });
+  }
+
+  try {
+    const processingPromises = items.map(async (item) => {
+      const cid = await i.url(item.url);
+      return { cid, metadata: item.metadata };
+    });
+
+    const processedItems = await Promise.all(processingPromises);
+
+    const manifest = {
+      archiveDate: new Date().toISOString(),
+      items: processedItems,
+    };
+
+    const manifestCid = await i.object(manifest);
+    res.json({ success: true, manifestCid });
+
+  } catch (error) {
+    console.error('Batch archive failed:', error);
+    res.status(500).json({ error: 'Failed to process batch archive.' });
   }
 });
 app.get('/recent', (req, res) => {

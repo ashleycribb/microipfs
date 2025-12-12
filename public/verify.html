@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Credential Verifier</title>
-  <script src="https://cdn.jsdelivr.net/npm/jose@latest/dist/browser/jose.min.js"></script>
   <style>
     body { font-family: sans-serif; margin: 2rem; }
     .container { max-width: 800px; margin: 0 auto; }
@@ -19,7 +18,9 @@
     <div id="result"></div>
   </div>
 
-  <script>
+  <script type="module">
+    import * as jose from '/node_modules/jose/dist/webapi/index.js';
+
     const resultDiv = document.getElementById('result');
 
     async function verify() {
@@ -47,7 +48,32 @@
           <p>The signature is valid and the credential was issued by a trusted authority.</p>
           <h3>Credential Details:</h3>
           <pre>${JSON.stringify(payload, null, 2)}</pre>
+          <div id="proof-of-work"></div>
         `;
+
+        // Deep Verification
+        const proofOfWorkCID = payload.vc.credentialSubject.proofOfWorkCID;
+        if (proofOfWorkCID) {
+          const proofDiv = document.getElementById('proof-of-work');
+          proofDiv.innerHTML = '<h3>Loading Proof of Work...</h3>';
+          try {
+            const manifestUrl = `https://ipfs.io/ipfs/${proofOfWorkCID}`;
+            const manifestResponse = await fetch(manifestUrl);
+            const manifest = await manifestResponse.json();
+
+            const itemsHtml = manifest.items.map(item =>
+              `<li><a href="https://ipfs.io/ipfs/${item.cid}" target="_blank">${item.metadata.title || 'Untitled'}</a></li>`
+            ).join('');
+
+            proofDiv.innerHTML = `
+              <h3>✓ Proof of Work Found</h3>
+              <p>This credential is linked to the following archived work:</p>
+              <ul>${itemsHtml}</ul>
+            `;
+          } catch (e) {
+            proofDiv.innerHTML = '<h3>✗ Error loading Proof of Work.</h3>';
+          }
+        }
 
       } catch (error) {
         console.error('Verification failed:', error);
