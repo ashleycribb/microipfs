@@ -94,3 +94,23 @@ Stores a pre-encrypted blob of data. The server has no knowledge of the contents
 Checks the pinning status of a CID on NFT.storage.
 
 **Endpoint:** `GET /status/:cid`
+
+---
+
+# Future Vision: DIDs in K-12 Education
+
+The question of how a K-12 school in the U.S. could issue DIDs requires a thoughtful approach that balances state-level educational requirements with federal privacy laws. A successful implementation would not be a single, monolithic system, but a federated trust network.
+
+## A Potential Roadmap
+
+1.  **Adopt the `did:web` Method:** This is the most practical starting point. Each school district could host their DID documents on their own web servers, making their DIDs resolvable via standard HTTPS. This avoids the need for a custom blockchain and leverages existing, trusted infrastructure. A school's DID might look like `did:web:bostonschools.org:students:12345`.
+
+2.  **State-Level Trust Registries:** Each state's Department of Public Instruction (DPI) could maintain a cryptographically-verifiable list of all accredited school districts in their state. This registry would essentially be a "DID of DIDs," allowing anyone to confirm that a particular school district is a legitimate issuer of student credentials.
+
+3.  **Cross-State Interoperability:** A national body, perhaps facilitated by the U.S. Department of Education, could maintain a registry of all state DPIs. This would create a chain of trust from the federal level down to the individual school district, allowing a university in California to verify a credential from a high school in Massachusetts.
+
+## Key Considerations
+
+*   **Privacy (FERPA & COPPA):** Verifiable Credentials allow for "selective disclosure." A student could prove they are over 13 without revealing their exact birthdate, or prove they are a student at a particular school without revealing their student ID number. This is a significant privacy enhancement over traditional, all-or-nothing ID cards.
+*   **Key Management for Minors:** For younger students, the school or district could act as a "custodial wallet," managing the student's private keys. As students get older, they could be taught to manage their own keys, perhaps in a dedicated digital literacy course.
+*   **Verifiable Credentials for Everything:** This system could be used for more than just identity. It could be used to issue verifiable credentials for transcripts, attendance records, and even individual skills or competencies, creating a rich, student-owned "learning ledger."

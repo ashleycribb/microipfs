@@ -5,6 +5,7 @@ var express = require('express')
 var multer = require('multer')
 const fs = require('fs')
 const fsp = require('fs').promises
+const { randomUUID } = require('crypto');
 const axios = require('axios')
 const jose = require('jose')
 var app = express()
@@ -50,6 +51,7 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 
 const allowed = (process.env.ALLOWED ? process.env.ALLOWED.split(",") : [])
 const port = (process.env.PORT ? process.env.PORT : 3000)
+const issuerDid = process.env.ISSUER_DID || 'did:web:example.com';
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, UPLOAD_DIR)
@@ -68,7 +70,6 @@ const upload = multer({
 })
 app.use(express.json())
 app.use(express.static('public'))
-app.use('/node_modules', express.static('node_modules'))
 if (allowed && allowed.length > 0) {
   app.use(cors({ origin: allowed }))
 } else {
@@ -98,9 +99,9 @@ app.post('/issue-credential', async (req, res) => {
     return res.status(500).json({ error: 'Key pair not generated yet.' });
   }
 
-  const { studentDid, workCid, claims } = req.body;
-  if (!studentDid || !workCid || !claims) {
-    return res.status(400).json({ error: 'Missing required fields.' });
+  const { studentDid, proofOfWorkCID, claims } = req.body;
+  if (!studentDid || !claims) {
+    return res.status(400).json({ error: 'Missing studentDid or claims.' });
   }
 
   try {
@@ -109,14 +110,13 @@ app.post('/issue-credential', async (req, res) => {
         'https://www.w3.org/2018/credentials/v1',
         'https://www.w3.org/2018/credentials/examples/v1'
       ],
-      id: `urn:uuid:${crypto.randomUUID()}`,
+      id: `urn:uuid:${randomUUID()}`,
       type: ['VerifiableCredential', 'AcademicCredential'],
-      issuer: 'did:web:example.com', // In a real app, this would be the institution's DID
+      issuer: issuerDid,
       issuanceDate: new Date().toISOString(),
       credentialSubject: {
         id: studentDid,
-        workCid: workCid,
-        proofOfWorkCID: req.body.proofOfWorkCID, // New field for IPFS proof
+        proofOfWorkCID: proofOfWorkCID,
         ...claims
       }
     };
@@ -124,7 +124,7 @@ app.post('/issue-credential', async (req, res) => {
     const jwt = await new jose.SignJWT(vcPayload)
       .setProtectedHeader({ alg: 'ES256' })
       .setIssuedAt()
-      .setIssuer('did:web:example.com')
+       .setIssuer(issuerDid)
       .setSubject(studentDid)
       .sign(institutionKeyPair.privateKey);
 
