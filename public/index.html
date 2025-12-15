@@ -1,5 +1,58 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Learning Object Repository</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    #gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.5rem; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .card h2 { font-size: 1.25rem; margin-top: 0; }
+    .card p { margin: 0.5rem 0; }
+    .card-meta { font-size: 0.9rem; color: #555; }
+    .card-files { margin-top: 1rem; }
+    .card-files a { display: block; }
+  </style>
+</head>
 <body>
-<h1>Usage</h1>
+  <h1>Learning Object Repository</h1>
+  <div id="gallery"></div>
+
+  <script>
+    async function fetchRecent() {
+      const response = await fetch('/recent');
+      const cids = await response.json();
+      const gallery = document.getElementById('gallery');
+      gallery.innerHTML = '';
+
+      for (const cid of cids) {
+        const manifestUrl = `https://ipfs.io/ipfs/${cid}`;
+        const manifestResponse = await fetch(manifestUrl);
+        const manifest = await manifestResponse.json();
+
+        const filesHtml = manifest.files.map(file =>
+          `<a href="https://ipfs.io/ipfs/${file.cid}" target="_blank">${file.filename}</a>`
+        ).join('');
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <h2>${manifest.title}</h2>
+          <p class="card-meta">By: ${manifest.author}</p>
+          <p class="card-meta">Subject: ${manifest.subject} | Grade: ${manifest.gradeLevel}</p>
+          <p>${manifest.description}</p>
+          <div class="card-files">
+            <strong>Files:</strong>
+            ${filesHtml}
+          </div>
+          <p class="card-meta" style="margin-top: 1rem;">License: ${manifest.license}</p>
+        `;
+        gallery.appendChild(card);
+      }
+    }
+
+    fetchRecent();
+  </script>
 </body>
 </html>

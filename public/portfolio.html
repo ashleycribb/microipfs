@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Portfolio - Encrypt & Upload</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    .container { max-width: 600px; margin: 0 auto; }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; margin-bottom: 0.5rem; }
+    input[type="file"], input[type="password"] { width: 100%; padding: 0.5rem; }
+    button { padding: 0.75rem 1.5rem; }
+    #status { margin-top: 1rem; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Encrypt and Upload Portfolio Item</h1>
+    <div class="form-group">
+      <label for="file">Select File:</label>
+      <input type="file" id="file" required>
+    </div>
+    <div class="form-group">
+      <label for="password">Encryption Password:</label>
+      <input type="password" id="password" required>
+    </div>
+    <button id="upload-btn">Encrypt and Upload</button>
+    <div id="status"></div>
+  </div>
+
+  <hr style="margin: 3rem 0;">
+
+  <div class="container">
+    <h1>Your Digital Wallet</h1>
+    <div class="form-group">
+      <label for="did">Your Decentralized ID (DID):</label>
+      <input type="text" id="did" readonly>
+      <button id="generate-did-btn">Generate New DID</button>
+    </div>
+    <div class="form-group">
+      <label for="vc-jwt">Received VC (Paste JWT here):</label>
+      <textarea id="vc-jwt" rows="4" style="width: 100%;"></textarea>
+      <button id="store-vc-btn">Store Credential</button>
+    </div>
+    <div id="credentials-list"></div>
+  </div>
+
+  <hr style="margin: 3rem 0;">
+
+  <div class="container">
+    <h1>Decrypt and Download Portfolio Item</h1>
+    <div class="form-group">
+      <label for="cid">IPFS CID:</label>
+      <input type="text" id="cid" required>
+    </div>
+    <div class="form-group">
+      <label for="password-decrypt">Decryption Password:</label>
+      <input type="password" id="password-decrypt" required>
+    </div>
+    <button id="decrypt-btn">Decrypt and Download</button>
+    <div id="status-decrypt"></div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('file');
+    const passwordInput = document.getElementById('password');
+    const uploadBtn = document.getElementById('upload-btn');
+    const statusDiv = document.getElementById('status');
+
+    const didInput = document.getElementById('did');
+    const generateDidBtn = document.getElementById('generate-did-btn');
+    const vcJwtInput = document.getElementById('vc-jwt');
+    const storeVcBtn = document.getElementById('store-vc-btn');
+    const credentialsListDiv = document.getElementById('credentials-list');
+
+    const cidInput = document.getElementById('cid');
+    const passwordDecryptInput = document.getElementById('password-decrypt');
+    const decryptBtn = document.getElementById('decrypt-btn');
+    const statusDecryptDiv = document.getElementById('status-decrypt');
+
+    uploadBtn.addEventListener('click', async () => {
+      const file = fileInput.files[0];
+      const password = passwordInput.value;
+
+      if (!file || !password) {
+        statusDiv.textContent = 'Please select a file and enter a password.';
+        return;
+      }
+
+      try {
+        statusDiv.textContent = 'Encrypting file... (this may take a moment)';
+
+        // 1. Derive a key from the password using PBKDF2
+        const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        const keyMaterial = await window.crypto.subtle.importKey(
+          'raw',
+          new TextEncoder().encode(password),
+          { name: 'PBKDF2' },
+          false,
+          ['deriveBits', 'deriveKey']
+        );
+        const key = await window.crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt: salt, iterations: 100000, hash: 'SHA-256' },
+          keyMaterial,
+          { name: 'AES-GCM', length: 256 },
+          true,
+          ['encrypt', 'decrypt']
+        );
+
+        // 2. Encrypt the file content using AES-GCM
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const fileBuffer = await file.arrayBuffer();
+        const encryptedContent = await window.crypto.subtle.encrypt(
+          { name: 'AES-GCM', iv: iv },
+          key,
+          fileBuffer
+        );
+
+        // 3. Prepare the payload
+        // We need to send the salt, iv, and encrypted content to the server.
+        const encryptedBlob = new Blob([salt, iv, new Uint8Array(encryptedContent)], { type: 'application/octet-stream' });
+
+        statusDiv.textContent = 'Uploading encrypted file...';
+
+        const formData = new FormData();
+        formData.append('file', encryptedBlob, file.name);
+
+        const response = await fetch('/add-encrypted-object', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Upload failed: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        statusDiv.innerHTML = `Upload successful! CID: <a href="https://ipfs.io/ipfs/${result.success}" target="_blank">${result.success}</a>`;
+
+      } catch (error) {
+        console.error('Encryption/upload failed:', error);
+        statusDiv.textContent = `Error: ${error.message}`;
+      }
+    });
+
+    decryptBtn.addEventListener('click', async () => {
+      const cid = cidInput.value;
+      const password = passwordDecryptInput.value;
+
+      if (!cid || !password) {
+        statusDecryptDiv.textContent = 'Please enter a CID and a password.';
+        return;
+      }
+
+      try {
+        statusDecryptDiv.textContent = 'Downloading encrypted file...';
+
+        const response = await fetch(`https://ipfs.io/ipfs/${cid}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch from IPFS: ${response.statusText}`);
+        }
+        const encryptedBuffer = await response.arrayBuffer();
+
+        statusDecryptDiv.textContent = 'Decrypting file...';
+
+        const salt = new Uint8Array(encryptedBuffer.slice(0, 16));
+        const iv = new Uint8Array(encryptedBuffer.slice(16, 28));
+        const encryptedContent = new Uint8Array(encryptedBuffer.slice(28));
+
+        const keyMaterial = await window.crypto.subtle.importKey(
+          'raw',
+          new TextEncoder().encode(password),
+          { name: 'PBKDF2' },
+          false,
+          ['deriveBits', 'deriveKey']
+        );
+        const key = await window.crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt: salt, iterations: 100000, hash: 'SHA-256' },
+          keyMaterial,
+          { name: 'AES-GCM', length: 256 },
+          true,
+          ['encrypt', 'decrypt']
+        );
+
+        const decryptedContent = await window.crypto.subtle.decrypt(
+          { name: 'AES-GCM', iv: iv },
+          key,
+          encryptedContent
+        );
+
+        statusDecryptDiv.textContent = 'Decryption successful! Preparing download...';
+
+        const blob = new Blob([decryptedContent]);
+        const a = document.createElement('a');
+        const url = window.URL.createObjectURL(blob);
+        a.href = url;
+        a.download = 'decrypted-file'; // We don't have the original filename here
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+      } catch (error) {
+        console.error('Decryption/download failed:', error);
+        statusDecryptDiv.textContent = `Error: ${error.message}`;
+      }
+    });
+
+    generateDidBtn.addEventListener('click', async () => {
+      // This is a simplified did:key generation for demo purposes.
+      // A real implementation would use a proper library.
+      const keyPair = await window.crypto.subtle.generateKey(
+        { name: 'ECDSA', namedCurve: 'P-256' },
+        true,
+        ['sign', 'verify']
+      );
+      const publicKeyJwk = await window.crypto.subtle.exportJwk(keyPair.publicKey);
+      const did = `did:key:z${btoa(JSON.stringify(publicKeyJwk)).replace(/=/g, '')}`;
+      didInput.value = did;
+      localStorage.setItem('studentDid', did);
+    });
+
+    storeVcBtn.addEventListener('click', () => {
+      const vcJwt = vcJwtInput.value;
+      if (!vcJwt) return;
+      let credentials = JSON.parse(localStorage.getItem('credentials') || '[]');
+      credentials.push(vcJwt);
+      localStorage.setItem('credentials', JSON.stringify(credentials));
+      vcJwtInput.value = '';
+      renderCredentials();
+    });
+
+    function renderCredentials() {
+      let credentials = JSON.parse(localStorage.getItem('credentials') || '[]');
+      credentialsListDiv.innerHTML = '<h3>Your Credentials:</h3>';
+      if (credentials.length === 0) {
+        credentialsListDiv.innerHTML += '<p>No credentials stored yet.</p>';
+        return;
+      }
+      credentials.forEach((vcJwt, index) => {
+        const decoded = JSON.parse(atob(vcJwt.split('.')[1]));
+        const shareLink = `${window.location.origin}/verify.html?vc=${encodeURIComponent(vcJwt)}`;
+        credentialsListDiv.innerHTML += `
+          <div>
+            <p><b>Credential ${index + 1}:</b> ${decoded.vc.type.join(', ')}</p>
+            <p><b>Issued for:</b> ${decoded.sub}</p>
+            <input type="text" value="${shareLink}" readonly style="width: 80%;">
+            <button onclick="navigator.clipboard.writeText('${shareLink}')">Copy Link</button>
+          </div>
+        `;
+      });
+    }
+
+    // Load DID and credentials on page load
+    didInput.value = localStorage.getItem('studentDid') || '';
+    renderCredentials();
+  </script>
+</body>
+</html>
