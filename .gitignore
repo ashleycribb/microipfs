@@ -2,3 +2,5 @@
 node_modules
 server.log
 keys.json
+private/
+public/dids/
