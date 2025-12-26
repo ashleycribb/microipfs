@@ -43,24 +43,37 @@ A scalable endpoint for creating a permanent archive of multiple files in a sing
 
 **Endpoint:** `POST /batch-archive`
 
-**Body (JSON):** An object with an `items` property, which is an array of objects. Each object must have a `url` (the URL of the content to pin) and can have an optional `metadata` object.
+**Body (JSON):** An object with an `items` property, which is an an array of objects. Each object must have a `url` (the URL of the content to pin) and can have an optional `metadata` object. The `studentId` field in the metadata has been replaced with `studentDid`.
 ```json
 {
   "items": [
     {
       "url": "https://example.com/student-a/thesis.pdf",
-      "metadata": { "studentId": "123", "title": "My Final Thesis" }
+      "metadata": { "studentDid": "did:web:example.com:students:123", "title": "My Final Thesis" }
     },
     {
       "url": "https://example.com/student-b/project.zip",
-      "metadata": { "studentId": "456", "title": "Capstone Project" }
+      "metadata": { "studentDid": "did:web:example.com:students:456", "title": "Capstone Project" }
     }
   ]
 }
 ```
 The endpoint returns a single `manifestCid` for the entire batch.
 
-## 2. Issue Verifiable Credential
+## 2. Create Student DID
+
+Creates a new `did:web` Decentralized Identifier for a student.
+
+**Endpoint:** `POST /create-did`
+
+**Authentication:** Requires a Bearer Token in the `Authorization` header. The token should be set in the `.env` file as `ADMIN_TOKEN`.
+
+**Body (JSON):**
+*   `studentId` (string): A unique identifier for the student (e.g., a username or legacy ID).
+
+The endpoint will generate a new cryptographic key pair for the student, create a DID Document, and save it to a public directory. The private key is saved to the server's `private/keys` directory and is not returned in the response. It returns the student's new DID.
+
+## 3. Issue Verifiable Credential
 
 Issues a W3C-compliant Verifiable Credential (VC) as a JWT.
 

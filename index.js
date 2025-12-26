@@ -4,7 +4,7 @@ var { I } = require('ipfsio')
 var express = require('express')
 var multer = require('multer')
 const fs = require('fs')
-const fsp = require('fs').promises
+const fsp = require('fs').promises;
 const { randomUUID } = require('crypto');
 const axios = require('axios')
 const jose = require('jose')
@@ -48,6 +48,19 @@ const UPLOAD_DIR = 'uploads/'
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR)
 }
+
+const PRIVATE_KEY_DIR = 'private/keys/'
+if (!fs.existsSync(PRIVATE_KEY_DIR)) {
+  fs.mkdirSync(PRIVATE_KEY_DIR, { recursive: true })
+}
+
+const authenticate = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token || token !== process.env.ADMIN_TOKEN) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+};
 
 const allowed = (process.env.ALLOWED ? process.env.ALLOWED.split(",") : [])
 const port = (process.env.PORT ? process.env.PORT : 3000)
@@ -134,6 +147,63 @@ app.post('/issue-credential', async (req, res) => {
     res.status(500).json({ error: 'Failed to issue credential.' });
   }
 });
+
+app.post('/create-did', authenticate, async (req, res) => {
+  const { studentId } = req.body;
+  if (!studentId) {
+    return res.status(400).json({ error: 'Missing studentId.' });
+  }
+
+  // Sanitize studentId to prevent path traversal
+  const sanitizedStudentId = studentId.replace(/[^a-zA-Z0-9_-]/g, '');
+  if (sanitizedStudentId !== studentId) {
+    return res.status(400).json({ error: 'Invalid characters in studentId.' });
+  }
+
+  try {
+    const { publicKey, privateKey } = await jose.generateKeyPair('ES256');
+    const publicKeyJwk = await jose.exportJWK(publicKey);
+    const privateKeyJwk = await jose.exportJWK(privateKey);
+
+    // Ensure the base directory exists
+    const didBasePath = `public/dids/students/${sanitizedStudentId}`;
+    await fsp.mkdir(didBasePath, { recursive: true });
+
+    const domain = process.env.PUBLIC_DOMAIN || req.headers.host;
+    const did = `did:web:${domain}:dids:students:${sanitizedStudentId}`;
+    const didDocument = {
+      '@context': 'https://www.w3.org/ns/did/v1',
+      id: did,
+      verificationMethod: [
+        {
+          id: `${did}#keys-1`,
+          type: 'JsonWebKey2020',
+          controller: did,
+          publicKeyJwk: publicKeyJwk,
+        },
+      ],
+      authentication: [`${did}#keys-1`],
+    };
+
+    await fsp.writeFile(
+      `${didBasePath}/did.json`,
+      JSON.stringify(didDocument, null, 2)
+    );
+
+    // Save the private key to a file instead of returning it
+    await fsp.writeFile(
+      `${PRIVATE_KEY_DIR}${sanitizedStudentId}.json`,
+      JSON.stringify(privateKeyJwk, null, 2)
+    );
+
+    res.status(201).json({
+      did: did,
+    });
+  } catch (error) {
+    console.error('Failed to create DID:', error);
+    res.status(500).json({ error: 'Failed to create DID.' });
+  }
+});
 app.post('/batch-archive', async (req, res) => {
   const { items } = req.body; // Expects an array of objects with { url, metadata }
 
@@ -143,6 +213,9 @@ app.post('/batch-archive', async (req, res) => {
 
   try {
     const processingPromises = items.map(async (item) => {
+      if (!item.metadata || !item.metadata.studentDid) {
+        throw new Error('Missing studentDid in item metadata.');
+      }
       const cid = await i.url(item.url);
       return { cid, metadata: item.metadata };
     });
