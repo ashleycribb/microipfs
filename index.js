@@ -1,15 +1,15 @@
 require('dotenv').config()
 var cors = require('cors')
-var { I } = require('ipfsio')
 var express = require('express')
 var multer = require('multer')
 const fs = require('fs')
 const fsp = require('fs').promises
 const { randomUUID } = require('crypto');
-const axios = require('axios')
 const jose = require('jose')
+const axios = require('axios')
 var app = express()
-var i = new I(process.env.NFT_STORAGE_KEY)
+
+const NFT_STORAGE_API = 'https://api.nft.storage';
 
 let institutionKeyPair;
 const KEY_FILE = 'keys.json';
@@ -25,7 +25,7 @@ async function initializeKeys() {
       };
       console.log('Loaded institutional key pair from file.');
     } else {
-      const { publicKey, privateKey } = await jose.generateKeyPair('ES256');
+      const { publicKey, privateKey } = await jose.generateKeyPair('ES256', { extractable: true });
       institutionKeyPair = { publicKey, privateKey };
       const jwk = {
         publicKey: await jose.exportJWK(publicKey),
@@ -76,16 +76,6 @@ if (allowed && allowed.length > 0) {
   app.use(cors())
 }
 app.use(express.urlencoded({ extended: true }));
-app.post('/add', async (req, res) => {
-  let cid;
-  if (req.body.url) {
-    cid = await i.url(req.body.url)
-  } else if (req.body.object) {
-    cid = await i.object(req.body.object)
-  }
-  console.log("cid", cid)
-  res.json({ success: cid })
-})
 app.get('/.well-known/jwks.json', async (req, res) => {
   if (!institutionKeyPair || !institutionKeyPair.publicKey) {
     return res.status(500).json({ error: 'Key pair not generated yet.' });
@@ -135,7 +125,7 @@ app.post('/issue-credential', async (req, res) => {
   }
 });
 app.post('/batch-archive', async (req, res) => {
-  const { items } = req.body; // Expects an array of objects with { url, metadata }
+  const { items } = req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Invalid or empty "items" array in request body.' });
@@ -143,8 +133,14 @@ app.post('/batch-archive', async (req, res) => {
 
   try {
     const processingPromises = items.map(async (item) => {
-      const cid = await i.url(item.url);
-      return { cid, metadata: item.metadata };
+      const response = await axios.get(item.url, { responseType: 'arraybuffer' });
+      const { data } = await axios.post(`${NFT_STORAGE_API}/upload`, response.data, {
+        headers: {
+          'Authorization': `Bearer ${process.env.NFT_STORAGE_KEY}`,
+          'Content-Type': 'application/octet-stream'
+        }
+      });
+      return { cid: data.value.cid, metadata: item.metadata };
     });
 
     const processedItems = await Promise.all(processingPromises);
@@ -154,8 +150,13 @@ app.post('/batch-archive', async (req, res) => {
       items: processedItems,
     };
 
-    const manifestCid = await i.object(manifest);
-    res.json({ success: true, manifestCid });
+    const { data } = await axios.post(`${NFT_STORAGE_API}/upload`, JSON.stringify(manifest), {
+      headers: {
+        'Authorization': `Bearer ${process.env.NFT_STORAGE_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    res.json({ success: true, manifestCid: data.value.cid });
 
   } catch (error) {
     console.error('Batch archive failed:', error);
@@ -167,57 +168,67 @@ app.get('/recent', (req, res) => {
 })
 
 app.get('/status/:cid', async (req, res) => {
-  const { cid } = req.params
+  const { cid } = req.params;
   try {
-    const response = await axios.get(`https://api.nft.storage/check/${cid}`, {
-      headers: {
-        'Authorization': `Bearer ${process.env.NFT_STORAGE_KEY}`
-      }
-    })
-    res.json(response.data)
+    const { data } = await axios.get(`${NFT_STORAGE_API}/${cid}`, {
+      headers: { 'Authorization': `Bearer ${process.env.NFT_STORAGE_KEY}` }
+    });
+    res.json(data);
   } catch (error) {
-    if (error.response) {
-      res.status(error.response.status).json({ error: error.response.data })
+    if (error.response && error.response.status === 404) {
+      res.status(404).json({ error: 'CID not found.' });
     } else {
-      res.status(500).json({ error: 'Failed to check CID status' })
+      console.error(`Failed to check CID ${cid}:`, error);
+      res.status(500).json({ error: 'Failed to check CID status.' });
     }
   }
-})
+});
 
 app.post('/add-encrypted-object', upload.single('file'), async (req, res) => {
-  const file = req.file
+  const file = req.file;
   if (!file) {
-    return res.status(400).json({ error: 'No file uploaded' })
+    return res.status(400).json({ error: 'No file uploaded' });
   }
 
   try {
-    const cid = await i.path(file.path)
-    res.json({ success: cid })
+    const content = await fsp.readFile(file.path);
+    const { data } = await axios.post(`${NFT_STORAGE_API}/upload`, content, {
+      headers: {
+        'Authorization': `Bearer ${process.env.NFT_STORAGE_KEY}`,
+        'Content-Type': 'application/octet-stream'
+      }
+    });
+    res.json({ success: data.value.cid });
   } catch (error) {
-    console.error('Failed to pin encrypted object:', error)
-    res.status(500).json({ error: 'Failed to pin encrypted object' })
+    console.error('Failed to pin encrypted object:', error);
+    res.status(500).json({ error: 'Failed to pin encrypted object' });
   } finally {
-    // Clean up the temporary file
-    await fsp.unlink(file.path)
+    await fsp.unlink(file.path);
   }
-})
+});
 
 app.post('/add-learning-object', upload.array('files'), async (req, res) => {
-  const files = req.files
+  const files = req.files;
   if (!files || files.length === 0) {
-    return res.status(400).json({ error: 'No files uploaded' })
+    return res.status(400).json({ error: 'No files uploaded' });
   }
 
-  const { title, author, subject, gradeLevel, license, description } = req.body
+  const { title, author, subject, gradeLevel, license, description } = req.body;
 
   try {
-    const cids = []
+    const cids = [];
     for (const file of files) {
-      const cid = await i.path(file.path)
+      const content = await fsp.readFile(file.path);
+      const { data } = await axios.post(`${NFT_STORAGE_API}/upload`, content, {
+        headers: {
+          'Authorization': `Bearer ${process.env.NFT_STORAGE_KEY}`,
+          'Content-Type': 'application/octet-stream'
+        }
+      });
       cids.push({
         filename: file.originalname,
-        cid: cid
-      })
+        cid: data.value.cid
+      });
     }
 
     const manifest = {
@@ -228,22 +239,28 @@ app.post('/add-learning-object', upload.array('files'), async (req, res) => {
       license: license || 'CC-BY-4.0',
       description: description || '',
       files: cids
-    }
+    };
 
-    const manifestCid = await i.object(manifest)
+    const { data } = await axios.post(`${NFT_STORAGE_API}/upload`, JSON.stringify(manifest), {
+      headers: {
+        'Authorization': `Bearer ${process.env.NFT_STORAGE_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
 
-    recentUploads.unshift(manifestCid)
+    const manifestCid = data.value.cid;
+    recentUploads.unshift(manifestCid);
     if (recentUploads.length > MAX_RECENT_UPLOADS) {
-      recentUploads.pop()
+      recentUploads.pop();
     }
 
-    res.json({ success: manifestCid })
+    res.json({ success: manifestCid });
   } catch (error) {
-    console.error('Failed to process dataset:', error)
-    res.status(500).json({ error: 'Failed to process dataset' })
+    console.error('Failed to process dataset:', error);
+    res.status(500).json({ error: 'Failed to process dataset' });
   } finally {
-    const unlinkPromises = files.map(file => fsp.unlink(file.path))
-    await Promise.all(unlinkPromises)
+    const unlinkPromises = files.map(file => fsp.unlink(file.path));
+    await Promise.all(unlinkPromises);
   }
-})
+});
 app.listen(port)
