@@ -5,8 +5,8 @@ var multer = require('multer')
 const fs = require('fs')
 const fsp = require('fs').promises
 const { randomUUID } = require('crypto');
-const jose = require('jose')
-const axios = require('axios')
+const jose = require('jose');
+const axios = require('axios');
 var app = express()
 
 const NFT_STORAGE_API = 'https://api.nft.storage';
@@ -76,6 +76,38 @@ if (allowed && allowed.length > 0) {
   app.use(cors())
 }
 app.use(express.urlencoded({ extended: true }));
+
+app.post('/add', async (req, res) => {
+  try {
+    let cid;
+    if (req.body.url) {
+      const response = await axios.get(req.body.url, { responseType: 'arraybuffer' });
+      const { data } = await axios.post(`${NFT_STORAGE_API}/upload`, response.data, {
+        headers: {
+          'Authorization': `Bearer ${process.env.NFT_STORAGE_KEY}`,
+          'Content-Type': 'application/octet-stream'
+        }
+      });
+      cid = data.value.cid;
+    } else if (req.body.object) {
+      const { data } = await axios.post(`${NFT_STORAGE_API}/upload`, JSON.stringify(req.body.object), {
+        headers: {
+          'Authorization': `Bearer ${process.env.NFT_STORAGE_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      cid = data.value.cid;
+    } else {
+      return res.status(400).json({ error: 'Request body must contain either "url" or "object".' });
+    }
+    console.log("cid", cid);
+    res.json({ success: cid });
+  } catch (error) {
+    console.error('Add endpoint failed:', error);
+    res.status(500).json({ error: 'Failed to process request.' });
+  }
+});
+
 app.get('/.well-known/jwks.json', async (req, res) => {
   if (!institutionKeyPair || !institutionKeyPair.publicKey) {
     return res.status(500).json({ error: 'Key pair not generated yet.' });
