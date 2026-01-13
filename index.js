@@ -116,17 +116,52 @@ app.get('/.well-known/jwks.json', async (req, res) => {
   res.json({ keys: [jwk] });
 });
 
+app.post('/xapi/statements', async (req, res) => {
+  const statement = req.body;
+
+  // Basic validation for an xAPI statement
+  if (!statement.actor || !statement.verb || !statement.object) {
+    return res.status(400).json({ error: 'Invalid xAPI statement. "actor", "verb", and "object" are required.' });
+  }
+
+  try {
+    const { data } = await axios.post(`${NFT_STORAGE_API}/upload`, JSON.stringify(statement), {
+      headers: {
+        'Authorization': `Bearer ${process.env.NFT_STORAGE_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    res.json({ success: true, statementCid: data.value.cid });
+  } catch (error) {
+    console.error('Failed to store xAPI statement:', error);
+    res.status(500).json({ error: 'Failed to store xAPI statement.' });
+  }
+});
+
 app.post('/issue-credential', async (req, res) => {
   if (!institutionKeyPair || !institutionKeyPair.privateKey) {
     return res.status(500).json({ error: 'Key pair not generated yet.' });
   }
 
-  const { studentDid, proofOfWorkCID, claims } = req.body;
+  const { studentDid, proofOfWorkCID, claims, xapiStatementCID } = req.body;
   if (!studentDid || !claims) {
     return res.status(400).json({ error: 'Missing studentDid or claims.' });
   }
 
   try {
+    const credentialSubject = {
+      id: studentDid,
+      ...claims
+    };
+
+    if (proofOfWorkCID) {
+      credentialSubject.proofOfWorkCID = proofOfWorkCID;
+    }
+
+    if (xapiStatementCID) {
+      credentialSubject.xapiStatementCID = xapiStatementCID;
+    }
+
     const vcPayload = {
       '@context': [
         'https://www.w3.org/2018/credentials/v1',
@@ -136,11 +171,7 @@ app.post('/issue-credential', async (req, res) => {
       type: ['VerifiableCredential', 'AcademicCredential'],
       issuer: issuerDid,
       issuanceDate: new Date().toISOString(),
-      credentialSubject: {
-        id: studentDid,
-        proofOfWorkCID: proofOfWorkCID,
-        ...claims
-      }
+      credentialSubject: credentialSubject
     };
 
     const jwt = await new jose.SignJWT(vcPayload)

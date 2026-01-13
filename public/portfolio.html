@@ -32,6 +32,30 @@
   <hr style="margin: 3rem 0;">
 
   <div class="container">
+    <h1>Create Learning Record (xAPI Statement)</h1>
+    <div class="form-group">
+      <label for="learning-object">Select Learning Object (File):</label>
+      <input type="file" id="learning-object" required>
+    </div>
+    <div class="form-group">
+      <label for="verb">Verb:</label>
+      <select id="verb">
+        <option value="completed">Completed</option>
+        <option value="authored">Authored</option>
+        <option value="submitted">Submitted</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="object-name">Object Name/Description:</label>
+      <input type="text" id="object-name" placeholder="e.g., 'Final Physics Project'" style="width: 100%;">
+    </div>
+    <button id="create-statement-btn">Create & Store Statement</button>
+    <div id="statement-status"></div>
+  </div>
+
+  <hr style="margin: 3rem 0;">
+
+  <div class="container">
     <h1>Your Digital Wallet</h1>
     <div class="form-group">
       <label for="did">Your Decentralized ID (DID):</label>
@@ -73,6 +97,12 @@
     const vcJwtInput = document.getElementById('vc-jwt');
     const storeVcBtn = document.getElementById('store-vc-btn');
     const credentialsListDiv = document.getElementById('credentials-list');
+
+    const learningObjectInput = document.getElementById('learning-object');
+    const verbSelect = document.getElementById('verb');
+    const objectNameInput = document.getElementById('object-name');
+    const createStatementBtn = document.getElementById('create-statement-btn');
+    const statementStatusDiv = document.getElementById('statement-status');
 
     const cidInput = document.getElementById('cid');
     const passwordDecryptInput = document.getElementById('password-decrypt');
@@ -255,6 +285,78 @@
     // Load DID and credentials on page load
     didInput.value = localStorage.getItem('studentDid') || '';
     renderCredentials();
+
+    createStatementBtn.addEventListener('click', async () => {
+      const file = learningObjectInput.files[0];
+      const verb = verbSelect.value;
+      const objectName = objectNameInput.value;
+      const studentDid = didInput.value;
+
+      if (!file || !objectName || !studentDid) {
+        statementStatusDiv.textContent = 'Please select a file, provide an object name, and generate a DID.';
+        return;
+      }
+
+      try {
+        statementStatusDiv.textContent = 'Uploading learning object to IPFS...';
+
+        // 1. Upload the file to get its CID
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const uploadResponse = await fetch('/add-encrypted-object', { // Using the encrypted endpoint for simplicity, though it's not encrypted here.
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          throw new Error(`File upload failed: ${uploadResponse.statusText}`);
+        }
+        const uploadResult = await uploadResponse.json();
+        const objectCid = uploadResult.success;
+        statementStatusDiv.textContent = `File uploaded! CID: ${objectCid}. Now creating statement...`;
+
+        // 2. Construct the xAPI statement
+        const statement = {
+          actor: {
+            objectType: 'Agent',
+            account: {
+              homePage: 'https://' + window.location.host,
+              name: studentDid
+            }
+          },
+          verb: {
+            id: `http://adlnet.gov/expapi/verbs/${verb}`,
+            display: { "en-US": verb }
+          },
+          object: {
+            id: `ipfs://${objectCid}`,
+            definition: {
+              name: { "en-US": objectName }
+            }
+          }
+        };
+
+        // 3. Store the xAPI statement
+        const statementResponse = await fetch('/xapi/statements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(statement),
+        });
+
+        if (!statementResponse.ok) {
+          throw new Error(`Statement storage failed: ${statementResponse.statusText}`);
+        }
+
+        const statementResult = await statementResponse.json();
+        statementStatusDiv.innerHTML = `Statement stored successfully! Statement CID: <a href="https://ipfs.io/ipfs/${statementResult.statementCid}" target="_blank">${statementResult.statementCid}</a>`;
+
+      } catch (error) {
+        console.error('Statement creation failed:', error);
+        statementStatusDiv.textContent = `Error: ${error.message}`;
+      }
+    });
+
   </script>
 </body>
 </html>
