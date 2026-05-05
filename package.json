@@ -8,6 +8,9 @@
   },
   "author": "skogard",
   "license": "MIT",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "axios": "^1.7.2",
     "cors": "^2.8.5",
